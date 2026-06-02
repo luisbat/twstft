@@ -1,0 +1,29 @@
+# Versión: 0.2
+[Unit]
+Description=SATRE UDP listener — lee_satres
+Documentation=https://github.com/roa/twstft
+# Esperar a que la red esté disponible antes de arrancar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Ruta al script y al fichero de configuración
+# Ajustar si el proyecto está en otro directorio
+ExecStart=%h/twstft/lee_satres.py --config %h/twstft/twstft.ini
+
+# Reinicio automático si el proceso muere inesperadamente
+Restart=on-failure
+RestartSec=10s
+
+# Entorno limpio
+Environment=PYTHONUNBUFFERED=1
+
+# Los logs van directamente al fichero gestionado por TimedRotatingFileHandler
+# en <basedir>/log/lee_satres.log — no usar journal para no duplicar ni perder
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=default.target
