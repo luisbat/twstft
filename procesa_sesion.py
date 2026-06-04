@@ -59,7 +59,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "0.4"
+__version__ = "1.1"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -87,6 +87,13 @@ COL_T        = "t_seg"        # segundos desde inicio de medidas del slot
 TMP_ND  = "+99"
 HUM_ND  = "999"
 PRES_ND = "9999"
+
+# Meses en español para el nombre del fichero .ema
+MESES_ES = {
+    1: "ene", 2: "feb", 3: "mar", 4: "abr",
+    5: "may", 6: "jun", 7: "jul", 8: "ago",
+    9: "sep", 10: "oct", 11: "nov", 12: "dic",
+}
 
 # MJD
 _MJD_EPOCH = date(1858, 11, 17)
@@ -318,7 +325,7 @@ def ajuste_cuadratico_5sigma(df_slot: pd.DataFrame,
         coeffs   = np.polyfit(t_arr, y_arr, 2)
         p        = np.poly1d(coeffs)
         residuos = y_arr - p(t_arr)
-        std      = np.std(residuos)
+        std      = np.std(residuos, ddof=1)  # desviación estándar muestral (N-1)
 
         # Máscara de outliers
         mascara_ok = np.abs(residuos) <= sigma * std
@@ -345,7 +352,10 @@ def ajuste_cuadratico_5sigma(df_slot: pd.DataFrame,
 
 def generar_encabezamiento(cfg: configparser.ConfigParser,
                            nombre_fichero: str) -> list:
-    """Genera las líneas de encabezamiento del fichero ITU."""
+    """
+    Genera las líneas de encabezamiento del fichero ITU replicando
+    exactamente el formato del fichero oficial (espaciado fijo).
+    """
     lab       = get_str(cfg, "itu", "lab",       "???")
     fmt       = get_str(cfg, "itu", "format",    "01")
     rev_date  = get_str(cfg, "itu", "rev_date",  "")
@@ -355,13 +365,14 @@ def generar_encabezamiento(cfg: configparser.ConfigParser,
     comments  = get_str(cfg, "itu", "comments",  "")
 
     lineas = []
+    # Formato oficial: keyword alineada a columna 12
     lineas.append(f"* {nombre_fichero}")
-    lineas.append(f"* FORMAT {fmt}")
-    lineas.append(f"* LAB    {lab}")
+    lineas.append(f"* FORMAT    {fmt}")
+    lineas.append(f"* LAB       {lab}")
     if rev_date:
-        lineas.append(f"* REV DATE {rev_date}")
+        lineas.append(f"* REV DATE  {rev_date}")
 
-    # Estaciones terrenas
+    # Estaciones terrenas — columnas fijas: LA: en col 12, LO: en col 37, HT: en col 59
     for sec in cfg.sections():
         if not sec.lower().startswith("estacion "):
             continue
@@ -369,14 +380,14 @@ def generar_encabezamiento(cfg: configparser.ConfigParser,
         latitud  = get_str(cfg, sec, "latitud",  "")
         longitud = get_str(cfg, sec, "longitud", "")
         altura   = get_str(cfg, sec, "altura",   "0")
-        lineas.append(
-            f"* ES {nombre:<6}  LA: {latitud:<18}  "
-            f"LO: {longitud:<22}  HT: +{float(altura):07.2f} m"
-        )
+        s = f"* ES {nombre:<6} LA: {latitud}"
+        s = s.ljust(37) + f"LO: {longitud}"
+        s = s.ljust(59) + f"HT: +{float(altura):07.2f} m"
+        lineas.append(s)
 
     lineas.append(f"* REF-FRAME {ref_frame}")
 
-    # Links satelitales
+    # Links satelitales — columnas fijas: SAT: en col 12, NLO: en col 37, XPNDR: en col 59
     for sec in cfg.sections():
         if not sec.lower().startswith("link "):
             continue
@@ -390,18 +401,17 @@ def generar_encabezamiento(cfg: configparser.ConfigParser,
         sat_ntx  = get_float(cfg, sec, "sat_ntx", 0.0)
         sat_nrx  = get_float(cfg, sec, "sat_nrx", 0.0)
         bw       = get_float(cfg, sec, "bw",      0.0)
-        lineas.append(
-            f"* LINK  {link_id:>3} SAT: {satelite:<20}  "
-            f"NLO: {nlo_dir} {nlo_grad:>3} {nlo_min:>2} {nlo_seg:<7}  "
-            f"XPNDR: {xpndr} ns"
-        )
+        nlo_str  = f"{nlo_dir} {int(nlo_grad):3d} {int(nlo_min):2d} {nlo_seg}"
+        s = f"* LINK {link_id:>4} SAT: {satelite}"
+        s = s.ljust(37) + f"NLO: {nlo_str}"
+        s = s.ljust(59) + f"XPNDR: {xpndr} ns"
+        lineas.append(s)
         lineas.append(
             f"*           SAT-NTX: {sat_ntx:10.4f} MHz  "
-            f"SAT-NRX: {sat_nrx:10.4f} MHz  "
-            f"BW: {bw:5.1f} MHz"
+            f"SAT-NRX: {sat_nrx:10.4f} MHz  BW: {bw:5.1f} MHz"
         )
 
-    # Calibraciones
+    # Calibraciones — columnas fijas: TYPE: en col 12, MJD: en col 37, EST. en col 49
     for sec in cfg.sections():
         if not sec.lower().startswith("cal "):
             continue
@@ -409,16 +419,26 @@ def generar_encabezamiento(cfg: configparser.ConfigParser,
         tipo   = get_str(cfg,  sec, "tipo",   "")
         mjd_c  = get_int(cfg,  sec, "mjd",    0)
         incert = get_float(cfg, sec, "incert", 0.0)
-        lineas.append(
-            f"* CAL  {cal_id:>4} TYPE: {tipo:<22}  "
-            f"MJD: {mjd_c:5d}  EST. UNCERT.: {incert:8.3f} ns"
-        )
+        s = f"* CAL {cal_id:>5} TYPE: {tipo}"
+        s = s.ljust(37) + f"MJD: {mjd_c:5d}"
+        s = s.ljust(49) + f"EST. UNCERT.: {incert:8.3f} ns"
+        lineas.append(s)
 
     lineas.append(f"* LOC-MON   {loc_mon}")
     lineas.append(f"* MODEM     {modem}")
     if comments:
         lineas.append(f"* COMMENTS  {comments}")
     lineas.append("*")
+
+    # Cabecera de columnas — replicar exactamente el formato oficial
+    lineas.append(
+        "* EARTH-STAT  LI  MJD  STTIME NTL        TW        DRMS SMP ATL"
+        "     REFDELAY     RSIG  CI S    CALR     ESDVAR   ESIG TMP HUM PRES"
+    )
+    lineas.append(
+        "* LOC    REM           hhmmss  s         s          ns       s"
+        "         s          ns            ns        ns      ns degC  %  mbar"
+    )
     return lineas
 
 
@@ -431,21 +451,25 @@ def formatear_linea_itu(loc, rem, li, mjd, sttime, ntl,
                          refdelay_s, rsig, ci, sw,
                          calr, esdvar, esig,
                          tmp=TMP_ND, hum=HUM_ND, pres=PRES_ND) -> str:
-    """Formatea una línea de datos según el Anexo 2 de UIT-R TF.1153-4."""
-    tw_str     = f"{tw_s:+.12f}"
-    ref_str    = f"{refdelay_s:+.12f}"
-    drms_str   = f"{drms_ns:.3f}"
-    rsig_str   = f"{rsig:.3f}"  if rsig   < 99998 else "99999"
-    esig_str   = f"{esig:.3f}"  if esig   < 99998 else "99999"
-    calr_str   = f"{calr:+12.3f}"   if abs(calr)   < 999999998 else "+999999999"
-    esdvar_str = f"{esdvar:+12.3f}" if abs(esdvar) < 999999998 else "+999999999"
+    """
+    Formatea una línea de datos según el Anexo 2 de UIT-R TF.1153-4.
+    Espaciados verificados contra fichero oficial:
+      - 1 espacio entre la mayoría de campos
+      - CALR y ESDVAR justificados a derecha en 9 chars
+      - 2 espacios antes de TMP y antes de HUM
+    """
+    tw_str     = f"{tw_s:+.12f}"       # +0.262383672844 = 15 chars
+    ref_str    = f"{refdelay_s:+.12f}" # +0.000000964858 = 15 chars
+    rsig_str   = f"{rsig:.3f}"   if rsig  < 99998 else "99999"
+    esig_str   = f"{esig:.3f}"   if esig  < 99998 else "99999"
+    calr_str   = f"{calr:.3f}"   if abs(calr)   < 999999998 else "999999999"
+    esdvar_str = f"{esdvar:.3f}" if abs(esdvar) < 999999998 else "999999999"
 
     return (
-        f"{loc:<6} {rem:<6} {li:>2} {mjd:5d} {sttime:6s} {ntl:3d} "
-        f"{tw_str:>20s} {drms_str:>6s} {smp:3d} {atl:3d} "
-        f"{ref_str:>20s} {rsig_str:>5s} {ci:3d} {sw:1d} "
-        f"{calr_str} {esdvar_str} {esig_str} "
-        f"{tmp:>3s} {hum:>3s} {pres:>4s}"
+        f"{loc:>6} {rem:>6} {li:>2} {mjd:5d} {sttime:6s} {ntl:3d} "
+        f"{tw_str} {drms_ns:.3f} {smp:03d} {atl:03d} "
+        f"{ref_str} {rsig_str} {ci:3d} {sw:1d} "
+        f"{calr_str:>9} {esdvar_str:>9} {esig_str:>5}  {tmp:>2}  {hum:>2} {pres}"
     )
 
 
@@ -457,6 +481,119 @@ def nombre_fichero_itu(lab: str, mjd: int) -> str:
     """TW<LAB><MM>.<MMM> donde MM.MMM son las últimas 5 cifras del MJD."""
     mjd_str = f"{mjd:05d}"
     return f"TW{lab.upper()}{mjd_str[-5:-3]}.{mjd_str[-3:]}"
+
+
+# ---------------------------------------------------------------------------
+# Datos ambientales (.ema)
+# ---------------------------------------------------------------------------
+
+def nombre_fichero_ema(fecha: date) -> str:
+    """
+    Genera el nombre del fichero .ema para la fecha indicada.
+    Formato: DDmmmAA.ema  (p.ej. 10abr26.ema)
+    """
+    dia = f"{fecha.day:02d}"
+    mes = MESES_ES[fecha.month]
+    ano = fecha.strftime("%y")
+    return f"{dia}{mes}{ano}.ema"
+
+
+def leer_ema(ruta_ema: str) -> pd.DataFrame:
+    """
+    Lee el fichero .ema y devuelve un DataFrame con columnas:
+      minuto, temperatura, humedad, presion
+
+    El fichero tiene 9 columnas separadas por espacios/tabuladores.
+    Usamos: col[0]=minuto, col[1]=temperatura, col[2]=humedad, col[7]=presion.
+    Las medidas están cada 10 minutos.
+    Devuelve DataFrame vacío si el fichero no existe o hay error.
+    """
+    if not os.path.isfile(ruta_ema):
+        logging.warning("Fichero .ema no encontrado: %s", ruta_ema)
+        return pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
+
+    registros = []
+    try:
+        with open(ruta_ema, "r", errors="replace") as f:
+            for linea in f:
+                linea = linea.strip()
+                if not linea or linea.startswith("#"):
+                    continue
+                cols = linea.split()
+                if len(cols) < 8:
+                    continue
+                try:
+                    registros.append({
+                        "minuto":      float(cols[0]),
+                        "temperatura": float(cols[1]),
+                        "humedad":     float(cols[2]),
+                        "presion":     float(cols[7]),
+                    })
+                except (ValueError, IndexError):
+                    continue
+    except Exception as exc:
+        logging.error("Error leyendo fichero .ema %s: %s", ruta_ema, exc)
+        return pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
+
+    if not registros:
+        logging.warning("Fichero .ema vacío o sin datos válidos: %s", ruta_ema)
+        return pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
+
+    df = pd.DataFrame(registros)
+    df = df.sort_values("minuto").reset_index(drop=True)
+    logging.debug("EMA: %d medidas leídas de %s", len(df), ruta_ema)
+    return df
+
+
+def interpolar_ema(df_ema: pd.DataFrame, minuto_fit: float):
+    """
+    Interpola los valores ambientales para el instante minuto_fit
+    (minuto del día, puede tener decimales).
+
+    Reglas:
+      - Si df_ema está vacío → devuelve (TMP_ND, HUM_ND, PRES_ND)
+      - Si minuto_fit <= primera medida → usa la primera medida
+      - Si minuto_fit >= última medida  → usa la última medida (sin extrapolar)
+      - En otro caso → interpolación lineal entre las dos medidas adyacentes
+
+    Devuelve (tmp_str, hum_str, pres_str) en formato ITU.
+    """
+    if df_ema.empty:
+        return TMP_ND, HUM_ND, PRES_ND
+
+    minutos = df_ema["minuto"].to_numpy()
+    temps   = df_ema["temperatura"].to_numpy()
+    humeds  = df_ema["humedad"].to_numpy()
+    presis  = df_ema["presion"].to_numpy()
+
+    # Antes o en el primer punto
+    if minuto_fit <= minutos[0]:
+        t, h, p = temps[0], humeds[0], presis[0]
+
+    # Más allá del último punto → usar última medida
+    elif minuto_fit >= minutos[-1]:
+        t, h, p = temps[-1], humeds[-1], presis[-1]
+
+    # Interpolación lineal
+    else:
+        # Índice del primer punto mayor que minuto_fit
+        idx = int(np.searchsorted(minutos, minuto_fit, side="right"))
+        idx = min(idx, len(minutos) - 1)
+        m0, m1 = minutos[idx-1], minutos[idx]
+        frac = (minuto_fit - m0) / (m1 - m0)
+        t = temps[idx-1]   + frac * (temps[idx]   - temps[idx-1])
+        h = humeds[idx-1]  + frac * (humeds[idx]  - humeds[idx-1])
+        p = presis[idx-1]  + frac * (presis[idx]  - presis[idx-1])
+
+    # Formatear según formato ITU
+    # TMP:  nn    (°C, entero, sin signo aunque sea negativo salvo <0)
+    # HUM:  nnn   (%, entero sin decimales)
+    # PRES: nnnn  (hPa, entero)
+    tmp_str  = f"{int(round(t))}"
+    hum_str  = f"{int(round(h))}"
+    pres_str = f"{int(round(p))}"
+
+    return tmp_str, hum_str, pres_str
 
 
 # ---------------------------------------------------------------------------
@@ -518,9 +655,28 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     logging.info("Sesión %s %02d:00-%02d:59 | raw: %s",
                  fecha_str_file, hora_par, hora_par + 1, ruta_raw)
 
+    # --- Cargar datos ambientales (.ema) ---
+    ema_dir  = get_str(cfg, "ficheros", "ema_dir", "")
+    df_ema   = pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
+    if ema_dir:
+        nombre_ema = nombre_fichero_ema(fecha)
+        ruta_ema   = os.path.join(ema_dir, nombre_ema)
+        df_ema     = leer_ema(ruta_ema)
+        if not df_ema.empty:
+            logging.info("EMA: %s (%d medidas)", ruta_ema, len(df_ema))
+        else:
+            logging.warning("EMA no disponible, se usarán valores por defecto")
+    else:
+        logging.warning("ema_dir no configurado en twstft.ini, "
+                        "datos ambientales no disponibles")
+
     # --- Cargar labs e índice ---
     labs      = cargar_labs(cfg)
     idx_slots = construir_indice_slots(labs)
+
+    # --- Parámetros del laboratorio local (refdelay y rsig son del local) ---
+    lab_local_par   = labs.get(local_par,   {})
+    lab_local_impar = labs.get(local_impar, {})
 
     # --- Leer raw → DataFrame (solo las 2 horas de la sesión) ---
     df_raw = leer_raw_a_dataframe(ruta_raw, fecha_str_raw, hora_par, receptor)
@@ -577,6 +733,19 @@ def procesar_sesion(cfg: configparser.ConfigParser,
         sttime = f"{t_med//3600:02d}{(t_med%3600)//60:02d}{t_med%60:02d}"
         loc = local_par if int(slot_start) < 60 else local_impar
 
+        # Minuto del día correspondiente al punto de fit (t_eval=59.5 s
+        # desde el inicio de medidas del slot)
+        t_fit_abs  = t_med + T_EVAL           # segundos desde medianoche
+        minuto_fit = t_fit_abs / 60.0         # minuto del día (con decimales)
+
+        # Interpolar datos ambientales para el instante del fit
+        tmp_str, hum_str, pres_str = interpolar_ema(df_ema, minuto_fit)
+
+        # refdelay y rsig son siempre del laboratorio local
+        lab_local = lab_local_par if int(slot_start) < 60 else lab_local_impar
+        refdelay_local = lab_local.get("refdelay", 0.0)
+        rsig_local     = lab_local.get("rsig",     99999.0)
+
         lineas_datos.append(formatear_linea_itu(
             loc=loc,
             rem=nombre_lab,
@@ -588,13 +757,16 @@ def procesar_sesion(cfg: configparser.ConfigParser,
             drms_ns=drms_ns,
             smp=smp,
             atl=atl,
-            refdelay_s=lab_info["refdelay"],
-            rsig=lab_info["rsig"],
+            refdelay_s=refdelay_local,
+            rsig=rsig_local,
             ci=lab_info["ci"],
             sw=lab_info["sw"],
             calr=lab_info["calr"],
             esdvar=lab_info["esdvar"],
             esig=lab_info["esig"],
+            tmp=tmp_str,
+            hum=hum_str,
+            pres=pres_str,
         ))
 
     if not lineas_datos:
@@ -622,16 +794,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
             encabezamiento = generar_encabezamiento(cfg, nombre_itu)
             for linea in encabezamiento:
                 f.write(linea + "\n")
-            f.write(
-                "* EARTH-STAT LI   MJD STTIME  NTL                    TW"
-                "    DRMS SMP ATL            REFDELAY  RSIG  CI S"
-                "          CALR        ESDVAR  ESIG TMP HUM PRES\n"
-            )
-            f.write(
-                "* LOC    REM  hhmmss   s   s                    ns"
-                "      ns    s    s                  ns    ns"
-                "               ns          ns     ns degC   %  mbar\n"
-            )
+
         for linea in lineas_datos:
             f.write(linea + "\n")
 
