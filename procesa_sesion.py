@@ -51,6 +51,7 @@ import logging
 import logging.handlers
 import configparser
 from datetime import date, datetime, timedelta
+from typing import Optional
 from collections import defaultdict
 
 import numpy as np
@@ -59,7 +60,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.1"
+__version__ = "1.3"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -116,15 +117,18 @@ def cargar_config(ruta: str) -> configparser.ConfigParser:
     return cfg
 
 
-def get_str(cfg, sec, key, fallback=""):
+def get_str(cfg: configparser.ConfigParser, sec: str,
+            key: str, fallback: str = "") -> str:
     try:    return cfg.get(sec, key).strip()
     except: return fallback
 
-def get_float(cfg, sec, key, fallback=0.0):
+def get_float(cfg: configparser.ConfigParser, sec: str,
+              key: str, fallback: float = 0.0) -> float:
     try:    return cfg.getfloat(sec, key)
     except: return fallback
 
-def get_int(cfg, sec, key, fallback=0):
+def get_int(cfg: configparser.ConfigParser, sec: str,
+            key: str, fallback: int = 0) -> int:
     try:    return cfg.getint(sec, key)
     except: return fallback
 
@@ -446,11 +450,13 @@ def generar_encabezamiento(cfg: configparser.ConfigParser,
 # Formateo de una línea de datos ITU
 # ---------------------------------------------------------------------------
 
-def formatear_linea_itu(loc, rem, li, mjd, sttime, ntl,
-                         tw_s, drms_ns, smp, atl,
-                         refdelay_s, rsig, ci, sw,
-                         calr, esdvar, esig,
-                         tmp=TMP_ND, hum=HUM_ND, pres=PRES_ND) -> str:
+def formatear_linea_itu(loc: str, rem: str, li: str, mjd: int,
+                         sttime: str, ntl: int,
+                         tw_s: float, drms_ns: float, smp: int, atl: int,
+                         refdelay_s: float, rsig: float, ci: int, sw: int,
+                         calr: float, esdvar: float, esig: float,
+                         tmp: str = TMP_ND, hum: str = HUM_ND,
+                         pres: str = PRES_ND) -> str:
     """
     Formatea una línea de datos según el Anexo 2 de UIT-R TF.1153-4.
     Espaciados verificados contra fichero oficial:
@@ -480,7 +486,7 @@ def formatear_linea_itu(loc, rem, li, mjd, sttime, ntl,
 def nombre_fichero_itu(lab: str, mjd: int) -> str:
     """TW<LAB><MM>.<MMM> donde MM.MMM son las últimas 5 cifras del MJD."""
     mjd_str = f"{mjd:05d}"
-    return f"TW{lab.upper()}{mjd_str[-5:-3]}.{mjd_str[-3:]}"
+    return f"tw{lab.lower()}{mjd_str[-5:-3]}.{mjd_str[-3:]}"
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +610,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
                     fecha: date,
                     hora_par: int,
                     debug: bool,
-                    ruta_raw_override: str = None,
+                    ruta_raw_override: Optional[str] = None,
                     dia_completo: bool = False) -> None:
     """
     Procesa la sesión de 2 horas que comienza en hora_par del día fecha.
@@ -616,9 +622,12 @@ def procesar_sesion(cfg: configparser.ConfigParser,
                        desde cero
     """
     basedir     = get_str(cfg, "ficheros", "base",      BASEDIR_DEFAULT)
+    raw_dir     = get_str(cfg, "ficheros", "raw_dir",   "raw")
+    ema_dir     = get_str(cfg, "ficheros", "ema_dir",   "ema")
+    itu_dir     = get_str(cfg, "ficheros", "itu_dir",   "itu")
     lab         = get_str(cfg, "itu",      "lab",       "???")
     ntl         = get_int(cfg, "itu",      "ntl",       NTL_NOMINAL)
-    receptor    = get_str(cfg, "general",  "receptor",  RECEPTOR_DEFAULT)
+    receptor    = RECEPTOR_DEFAULT
     local_par   = get_str(cfg, "local",    "par",       "")
     local_impar = get_str(cfg, "local",    "impar",     "")
 
@@ -646,7 +655,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
             except ValueError:
                 pass  # usar la fecha proporcionada por --fecha
     else:
-        ruta_raw = os.path.join(basedir, unit_id, f"raw.{fecha_str_file}")
+        ruta_raw = os.path.join(basedir, unit_id, raw_dir, f"raw.{fecha_str_file}")
 
     if not os.path.isfile(ruta_raw):
         logging.error("Fichero raw no encontrado: %s", ruta_raw)
@@ -656,19 +665,14 @@ def procesar_sesion(cfg: configparser.ConfigParser,
                  fecha_str_file, hora_par, hora_par + 1, ruta_raw)
 
     # --- Cargar datos ambientales (.ema) ---
-    ema_dir  = get_str(cfg, "ficheros", "ema_dir", "")
-    df_ema   = pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
-    if ema_dir:
-        nombre_ema = nombre_fichero_ema(fecha)
-        ruta_ema   = os.path.join(ema_dir, nombre_ema)
-        df_ema     = leer_ema(ruta_ema)
-        if not df_ema.empty:
-            logging.info("EMA: %s (%d medidas)", ruta_ema, len(df_ema))
-        else:
-            logging.warning("EMA no disponible, se usarán valores por defecto")
+    df_ema = pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
+    nombre_ema = nombre_fichero_ema(fecha)
+    ruta_ema   = os.path.join(basedir, unit_id, ema_dir, nombre_ema)
+    df_ema     = leer_ema(ruta_ema)
+    if not df_ema.empty:
+        logging.info("EMA: %s (%d medidas)", ruta_ema, len(df_ema))
     else:
-        logging.warning("ema_dir no configurado en twstft.ini, "
-                        "datos ambientales no disponibles")
+        logging.warning("EMA no disponible, se usarán valores por defecto")
 
     # --- Cargar labs e índice ---
     labs      = cargar_labs(cfg)
@@ -693,12 +697,14 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     # --- Procesar cada slot ---
     lineas_datos = []
 
-    for slot_start, df_grupo in df_raw.groupby(COL_SLOT):
+    for slot_start_raw, df_grupo in df_raw.groupby(COL_SLOT):
+        slot_start: int = int(slot_start_raw)  # type: ignore[arg-type]
+
         # Cada grupo puede tener varios PRN si el enganche fue tardío;
         # tomamos el PRN mayoritario dentro del grupo
         prn = int(df_grupo[COL_PRN].mode().iloc[0])
 
-        lab_info = idx_slots.get((int(slot_start), prn))
+        lab_info = idx_slots.get((slot_start, prn))
         if lab_info is None:
             logging.warning("Slot min=%3d PRN=%2d: lab no encontrado en config",
                             slot_start, prn)
@@ -729,9 +735,9 @@ def procesar_sesion(cfg: configparser.ConfigParser,
                      smp, atl, n_iter, descartadas)
 
         # STTIME: HH:MM:SS inicio de medidas
-        t_med = hora_par * 3600 + int(slot_start) * 60 + 60
+        t_med = hora_par * 3600 + slot_start * 60 + 60
         sttime = f"{t_med//3600:02d}{(t_med%3600)//60:02d}{t_med%60:02d}"
-        loc = local_par if int(slot_start) < 60 else local_impar
+        loc = local_par if slot_start < 60 else local_impar
 
         # Minuto del día correspondiente al punto de fit (t_eval=59.5 s
         # desde el inicio de medidas del slot)
@@ -742,7 +748,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
         tmp_str, hum_str, pres_str = interpolar_ema(df_ema, minuto_fit)
 
         # refdelay y rsig son siempre del laboratorio local
-        lab_local = lab_local_par if int(slot_start) < 60 else lab_local_impar
+        lab_local = lab_local_par if slot_start < 60 else lab_local_impar
         refdelay_local = lab_local.get("refdelay", 0.0)
         rsig_local     = lab_local.get("rsig",     99999.0)
 
@@ -775,7 +781,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
 
     # --- Escribir fichero ITU ---
     nombre_itu = nombre_fichero_itu(lab, mjd)
-    dir_salida = os.path.join(basedir, unit_id)
+    dir_salida = os.path.join(basedir, unit_id, itu_dir)
     os.makedirs(dir_salida, exist_ok=True)
     ruta_itu = os.path.join(dir_salida, nombre_itu)
 
@@ -935,3 +941,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    

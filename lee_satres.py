@@ -39,7 +39,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "0.3"
+__version__ = "0.4"
 
 # ---------------------------------------------------------------------------
 # Constantes por defecto
@@ -153,6 +153,13 @@ def obtener_basedir(cfg: configparser.ConfigParser) -> str:
         return BASEDIR_DEFAULT
 
 
+def obtener_raw_dir(cfg: configparser.ConfigParser) -> str:
+    try:
+        return cfg.get("ficheros", "raw_dir").strip()
+    except (configparser.NoSectionError, configparser.NoOptionError):
+        return "raw"
+
+
 # ---------------------------------------------------------------------------
 # Gestión de ficheros raw por equipo
 # ---------------------------------------------------------------------------
@@ -160,16 +167,17 @@ def obtener_basedir(cfg: configparser.ConfigParser) -> str:
 class GestorFicheros:
     """
     Mantiene un fichero raw abierto por unit_id con rotación diaria.
-    Ruta: <basedir>/<unit_id>/raw.YYYYMMDD
+    Ruta: <basedir>/<unit_id>/<raw_dir>/raw.YYYYMMDD
     """
 
-    def __init__(self, basedir: str):
+    def __init__(self, basedir: str, raw_dir: str = "raw"):
         self.basedir = basedir
+        self.raw_dir = raw_dir
         # unit_id → {"fichero": <file>, "ruta": str, "fecha": str}
         self._ficheros: dict = {}
 
     def _abrir(self, unit_id: str, fecha_str: str):
-        directorio = os.path.join(self.basedir, unit_id)
+        directorio = os.path.join(self.basedir, unit_id, self.raw_dir)
         os.makedirs(directorio, exist_ok=True)
         ruta = os.path.join(directorio, f"raw.{fecha_str}")
         f = open(ruta, "a", encoding="utf-8")
@@ -253,7 +261,7 @@ def tipo_mensaje(linea: str) -> str:
 # Bucle principal
 # ---------------------------------------------------------------------------
 
-def iniciar_listener(puerto: int, basedir: str, debug: bool) -> None:
+def iniciar_listener(puerto: int, basedir: str, raw_dir: str, debug: bool) -> None:
     """Escucha UDP y graba en ficheros raw por equipo y día."""
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -263,7 +271,7 @@ def iniciar_listener(puerto: int, basedir: str, debug: bool) -> None:
 
     logging.info("Arrancado. Puerto UDP %d | Base dir: %s", puerto, basedir)
 
-    gestor = GestorFicheros(basedir)
+    gestor = GestorFicheros(basedir, raw_dir)
 
     # Estado por IP: (unit_id, fecha_str) del último %0> de cada equipo
     estado_por_ip: dict = {}
@@ -397,9 +405,9 @@ def main() -> None:
             __version__, args.config, puerto, basedir,
         )
 
-    iniciar_listener(puerto, basedir, args.debug)
+    raw_dir = obtener_raw_dir(cfg)
+    iniciar_listener(puerto, basedir, raw_dir, args.debug)
 
 
 if __name__ == "__main__":
     main()
-    
