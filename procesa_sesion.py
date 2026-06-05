@@ -60,7 +60,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.4"
+__version__ = "1.5"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -747,7 +747,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     # --- Cargar datos ambientales (.ema) ---
     df_ema = pd.DataFrame(columns=["minuto", "temperatura", "humedad", "presion"])
     nombre_ema = nombre_fichero_ema(fecha)
-    ruta_ema   = os.path.join(basedir, unit_id, ema_dir, nombre_ema)
+    ruta_ema   = os.path.join(ema_dir, nombre_ema)
     df_ema     = leer_ema(ruta_ema)
     if not df_ema.empty:
         logging.info("EMA: %s (%d medidas)", ruta_ema, len(df_ema))
