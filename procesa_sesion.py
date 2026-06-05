@@ -60,7 +60,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.3"
+__version__ = "1.4"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -83,6 +83,9 @@ COL_FORMATO  = "formato"      # 'L' o 'S'
 COL_PRN      = "prn"
 COL_RTT      = "rtt_ns"
 COL_T        = "t_seg"        # segundos desde inicio de medidas del slot
+COL_FREQ     = "freq_rx"      # frecuencia Rx [Hz]   (campo [21])
+COL_PWR      = "signal_power" # potencia señal [dBm] (campo [22])
+COL_CNO      = "cno"          # C/No [dBHz]          (campo [23])
 
 # Valores ITU para datos no disponibles
 TMP_ND  = "+99"
@@ -246,6 +249,20 @@ def leer_raw_a_dataframe(ruta_raw: str, fecha_str: str,
             if rtt == 0.0:
                 continue
 
+            # --- Frecuencia Rx, potencia y C/No ---
+            try:
+                freq = float(partes[21].strip())
+            except (ValueError, IndexError):
+                freq = 0.0
+            try:
+                pwr = float(partes[22].strip())
+            except (ValueError, IndexError):
+                pwr = 0.0
+            try:
+                cno = float(partes[23].strip())
+            except (ValueError, IndexError):
+                cno = 0.0
+
             # --- t_seg: segundos desde inicio de medidas del slot ---
             t_abs = h * 3600 + m * 60 + s
             t_ref = hora_par * 3600 + slot_start * 60 + 60
@@ -261,12 +278,16 @@ def leer_raw_a_dataframe(ruta_raw: str, fecha_str: str,
                 COL_PRN:     prn,
                 COL_RTT:     rtt,
                 COL_T:       t_seg,
+                COL_FREQ:    freq,
+                COL_PWR:     pwr,
+                COL_CNO:     cno,
             })
 
     if not registros:
         return pd.DataFrame(columns=[
             COL_HORA, COL_MINUTO, COL_SEGUNDO, COL_MIN_SES,
             COL_SLOT, COL_FORMATO, COL_PRN, COL_RTT, COL_T,
+            COL_FREQ, COL_PWR, COL_CNO,
         ])
 
     df = pd.DataFrame(registros)
@@ -490,6 +511,64 @@ def nombre_fichero_itu(lab: str, mjd: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Nombre del fichero RP
+# ---------------------------------------------------------------------------
+
+def nombre_fichero_rp(lab: str, mjd: int) -> str:
+    """
+    Genera el nombre del fichero .rp:
+    rp<lab><MM>.<MMM>  (mismas 5 cifras del MJD que el ITU)
+    Ejemplo: rproa61.140
+    """
+    mjd_str = f"{mjd:05d}"
+    return f"rp{lab.lower()}{mjd_str[-5:-3]}.{mjd_str[-3:]}"
+
+
+# ---------------------------------------------------------------------------
+# Generación del fichero report (.rp)
+# ---------------------------------------------------------------------------
+
+def calcular_stats_rp(df_slot: pd.DataFrame) -> dict:
+    """
+    Calcula las estadísticas de frecuencia, potencia y C/No
+    sobre el DataFrame del slot (ya filtrado por el 5-sigma del ITU).
+    Devuelve dict con mean, sd, min, max para cada magnitud.
+    """
+    stats = {}
+    for col, nombre in [(COL_FREQ, "F"), (COL_PWR, "P"), (COL_CNO, "C")]:
+        vals = df_slot[col].to_numpy(dtype=np.float64)
+        # Excluir ceros (medidas no válidas)
+        vals = vals[vals != 0.0]
+        if len(vals) > 0:
+            stats[f"{nombre}mean"] = float(np.mean(vals))
+            stats[f"{nombre}SD"]   = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
+            stats[f"{nombre}min"]  = float(np.min(vals))
+            stats[f"{nombre}max"]  = float(np.max(vals))
+        else:
+            stats[f"{nombre}mean"] = 0.0
+            stats[f"{nombre}SD"]   = 0.0
+            stats[f"{nombre}min"]  = 0.0
+            stats[f"{nombre}max"]  = 0.0
+    return stats
+
+
+def formatear_linea_rp(rem: str, mjd: int, sttime: str, smp: int,
+                        fmean: float, fsd: float, fmin: float, fmax: float,
+                        pmean: float, psd: float, pmin: float, pmax: float,
+                        cmean: float, csd: float, cmin: float, cmax: float) -> str:
+    """
+    Formatea una línea del fichero report (.rp).
+    Formato verificado contra fichero oficial RPROA61.196.
+    """
+    return (
+        f"{rem:>6} {mjd:5d} {sttime:6s} {smp:3d} "
+        f"{fmean:12.3f} {fsd:5.3f} {fmin:12.3f} {fmax:12.3f} "
+        f"{pmean:5.1f} {psd:5.3f} {pmin:5.1f} {pmax:4.1f} "
+        f"{cmean:4.1f} {csd:5.3f} {cmin:4.1f} {cmax:4.1f}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Datos ambientales (.ema)
 # ---------------------------------------------------------------------------
 
@@ -625,6 +704,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     raw_dir     = get_str(cfg, "ficheros", "raw_dir",   "raw")
     ema_dir     = get_str(cfg, "ficheros", "ema_dir",   "ema")
     itu_dir     = get_str(cfg, "ficheros", "itu_dir",   "itu")
+    rp_dir      = get_str(cfg, "ficheros", "rp_dir",    "rp")
     lab         = get_str(cfg, "itu",      "lab",       "???")
     ntl         = get_int(cfg, "itu",      "ntl",       NTL_NOMINAL)
     receptor    = RECEPTOR_DEFAULT
@@ -696,6 +776,7 @@ def procesar_sesion(cfg: configparser.ConfigParser,
 
     # --- Procesar cada slot ---
     lineas_datos = []
+    lineas_rp    = []
 
     for slot_start_raw, df_grupo in df_raw.groupby(COL_SLOT):
         slot_start: int = int(slot_start_raw)  # type: ignore[arg-type]
@@ -775,6 +856,18 @@ def procesar_sesion(cfg: configparser.ConfigParser,
             pres=pres_str,
         ))
 
+        # --- Línea report (.rp) con estadísticas sobre las mismas muestras ---
+        stats = calcular_stats_rp(df_usado)
+        lineas_rp.append(formatear_linea_rp(
+            rem=nombre_lab, mjd=mjd, sttime=sttime, smp=smp,
+            fmean=stats["Fmean"], fsd=stats["FSD"],
+            fmin=stats["Fmin"],   fmax=stats["Fmax"],
+            pmean=stats["Pmean"], psd=stats["PSD"],
+            pmin=stats["Pmin"],   pmax=stats["Pmax"],
+            cmean=stats["Cmean"], csd=stats["CSD"],
+            cmin=stats["Cmin"],   cmax=stats["Cmax"],
+        ))
+
     if not lineas_datos:
         logging.warning("No se generaron líneas de datos para esta sesión.")
         return
@@ -786,10 +879,16 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     ruta_itu = os.path.join(dir_salida, nombre_itu)
 
     # Si se está procesando el día completo y es la primera sesión (hora_par==0),
-    # borrar el fichero ITU existente para regenerarlo desde cero sin datos viejos
-    if dia_completo and hora_par == 0 and os.path.isfile(ruta_itu):
-        os.remove(ruta_itu)
-        logging.info("Fichero ITU anterior eliminado: %s", ruta_itu)
+    # borrar los ficheros ITU y RP existentes para regenerarlos desde cero
+    if dia_completo and hora_par == 0:
+        if os.path.isfile(ruta_itu):
+            os.remove(ruta_itu)
+            logging.info("Fichero ITU anterior eliminado: %s", ruta_itu)
+        nombre_rp_check = nombre_fichero_rp(lab, mjd)
+        ruta_rp_check   = os.path.join(basedir, unit_id, rp_dir, nombre_rp_check)
+        if os.path.isfile(ruta_rp_check):
+            os.remove(ruta_rp_check)
+            logging.info("Fichero RP anterior eliminado: %s", ruta_rp_check)
 
     # Si el fichero no existe aún → escribir encabezamiento + cabecera de columnas
     # Si ya existe (sesiones anteriores del mismo día) → append solo datos
@@ -807,6 +906,37 @@ def procesar_sesion(cfg: configparser.ConfigParser,
     logging.info("Fichero ITU %s: %s (%d líneas de datos)",
                  "creado" if fichero_nuevo else "actualizado",
                  ruta_itu, len(lineas_datos))
+
+    # --- Escribir fichero report (.rp) ---
+    if lineas_rp:
+        nombre_rp  = nombre_fichero_rp(lab, mjd)
+        dir_rp     = os.path.join(basedir, unit_id, rp_dir)
+        os.makedirs(dir_rp, exist_ok=True)
+        ruta_rp    = os.path.join(dir_rp, nombre_rp)
+
+        fichero_rp_nuevo = not os.path.isfile(ruta_rp)
+
+        with open(ruta_rp, "a", encoding="utf-8") as f:
+            if fichero_rp_nuevo:
+                f.write(f"* {nombre_rp}\n")
+                f.write(
+                    "*  REM   MJD STTIME SMP"
+                    "        Fmean   FSD         Fmin"
+                    "         Fmax Pmean   PSD  Pmin"
+                    "  Pmax Cmean   CSD Cmin Cmax\n"
+                )
+                f.write(
+                    "*            hhmmss   N"
+                    "           Hz    Hz           Hz"
+                    "           Hz   dBm    dB   dBm"
+                    "   dBm  dBHz    dB dBHz dBHz\n"
+                )
+            for linea in lineas_rp:
+                f.write(linea + "\n")
+
+        logging.info("Fichero RP %s: %s (%d líneas)",
+                     "creado" if fichero_rp_nuevo else "actualizado",
+                     ruta_rp, len(lineas_rp))
 
 
 # ---------------------------------------------------------------------------
