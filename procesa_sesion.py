@@ -60,7 +60,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.5"
+__version__ = "1.7"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -982,13 +982,16 @@ def main() -> None:
         description="procesa_sesion.py — Genera fichero ITU a partir del raw SATRE"
     )
     parser.add_argument(
-        "--hora", type=str, default=None,
-        help="Hora par de inicio de la sesión en formato HHMM (p.ej. 0000, 0200). "
-             "Si se omite, se procesan todas las sesiones del día (00:00-22:00)"
+        "--fecha", type=str, default=None,
+        help="Fecha YYYYMMDD a procesar"
     )
     parser.add_argument(
-        "--fecha", type=str, default=None,
-        help="Fecha YYYYMMDD (defecto: ayer)"
+        "--hoy", action="store_true", default=False,
+        help="Procesar el raw de hoy (defecto si no se especifica fecha)"
+    )
+    parser.add_argument(
+        "--ayer", action="store_true", default=False,
+        help="Procesar el raw de ayer"
     )
     parser.add_argument(
         "--config", type=str, default=config_default,
@@ -1009,34 +1012,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Parsear hora(s) a procesar
-    if args.hora is not None:
-        hora_str = args.hora.strip().zfill(4)
-        try:
-            hora_par = int(hora_str[:2])
-            if hora_par % 2 != 0:
-                raise ValueError("La hora debe ser par")
-        except ValueError as e:
-            print(f"Error en --hora: {e}", file=sys.stderr)
-            sys.exit(1)
-        horas_a_procesar = [hora_par]
-    else:
-        # Sin --hora → procesar todas las sesiones del día (00, 02, ..., 22)
-        horas_a_procesar = list(range(0, 24, 2))
+    # Procesar siempre todas las sesiones del día (00, 02, ..., 22)
+    horas_a_procesar = list(range(0, 24, 2))
 
-    # Parsear fecha
+    # Parsear fecha — prioridad: --fecha > --ayer > --hoy > defecto (hoy)
     if args.fecha:
         try:
             fecha = datetime.strptime(args.fecha, "%Y%m%d").date()
         except ValueError:
             print("Error en --fecha: formato esperado YYYYMMDD", file=sys.stderr)
             sys.exit(1)
-    else:
+    elif args.ayer:
         fecha = date.today() - timedelta(days=1)
-
-    # --raw sin --hora → procesar todas las sesiones del día sobre ese fichero
-    if args.raw and args.hora is None:
-        horas_a_procesar = list(range(0, 24, 2))
+    else:
+        # --hoy o sin opción de fecha → hoy
+        fecha = date.today()
 
     # Cargar config (logging provisional hasta tener basedir)
     logging.basicConfig(level=logging.DEBUG,
@@ -1055,10 +1045,6 @@ def main() -> None:
     logging.info("procesa_sesion.py v%s", __version__)
     logging.info("Config  : %s", args.config)
     logging.info("Fecha   : %s", fecha.strftime("%Y-%m-%d"))
-    if len(horas_a_procesar) == 1:
-        logging.info("Hora par: %02d:00", horas_a_procesar[0])
-    else:
-        logging.info("Horas   : todas las sesiones del día (00-22)")
     if args.raw:
         logging.info("Raw     : %s (explícito)", args.raw)
     logging.info("=" * 60)
@@ -1071,4 +1057,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    
