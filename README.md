@@ -123,41 +123,41 @@ El entorno virtual queda en `/home/tw/twstft/venv/`.
 ### 3.4 Crear la estructura de directorios de datos
 
 ```bash
-sudo mkdir -p /var/log/satres
-sudo chown tw:tw /var/log/satres
+mkdir -p /home/tw/satres/log
+mkdir -p /home/tw/ema
 ```
 
-> Ajustar la ruta según el valor de `base` en `twstft.ini`.
+> El subdirectorio `<unit_id>` (p.ej. `448/`) y sus subdirectorios `raw/`, `itu/`, `rp/`
+> los crea automáticamente `lee_satres.py` y `procesa_sesion.py` en la primera ejecución.
 
 ---
 
 ## 4. Estructura de directorios
 
 ```
-/home/tw/twstft/               ← repositorio
-  venv/                        ← entorno virtual Python
-  lee_satres.py
-  procesa_sesion.py
-  calcula_diff.py
-  twstft.ini
-  lee_satres.service
+/home/tw/
+  twstft/               ← repositorio (scripts + configuración)
+    venv/               ← entorno virtual Python
+    lee_satres.py
+    procesa_sesion.py
+    calcula_diff.py
+    twstft.ini
+    lee_satres.service
 
-/var/log/satres/               ← datos (base en twstft.ini)
-  <unit_id>/                   ← p.ej. 448/
-    raw/                       ← ficheros raw diarios
-      raw.YYYYMMDD
-    ema/                       ← (o ruta NFS, ver twstft.ini)
-      DDmmmAA.ema
-    itu/                       ← ficheros ITU generados
-      twroa61.140
-    rp/                        ← ficheros report generados
-      rproa61.140
-    log/                       ← logs de los programas
+  satres/               ← todos los datos del sistema
+    <unit_id>/          ← p.ej. 448/
+      raw/              ← ficheros raw diarios
+        raw.YYYYMMDD
+      itu/              ← ficheros ITU generados
+        twroa61.140
+      rp/               ← ficheros report generados
+        rproa61.140
+    log/                ← logs de todos los programas y unidades
       lee_satres.YYYY-MM-DD.log
       procesa_sesion.YYYY-MM-DD.log
 
-/var/meteo/ema/                ← datos ambientales (ruta absoluta independiente)
-  DDmmmAA.ema
+  ema/                  ← datos ambientales (independiente de unit_id)
+    DDmmmAA.ema         ← puede ser un montaje NFS sobre este directorio
 ```
 
 ---
@@ -172,11 +172,12 @@ al menos las siguientes secciones:
 
 ```ini
 [ficheros]
-base    = /var/log/satres      # directorio raíz de datos
+base    = /home/tw/satres      # directorio raíz de datos por unidad
 raw_dir = raw                  # subdirectorio para ficheros raw
-ema_dir = /var/meteo/ema       # ruta absoluta a ficheros .ema (NFS o local)
+ema_dir = /home/tw/ema         # ruta absoluta a ficheros .ema (puede ser NFS)
 itu_dir = itu                  # subdirectorio para ficheros ITU
 rp_dir  = rp                   # subdirectorio para ficheros report
+log_dir = /home/tw/satres/log  # directorio de logs (compartido por todas las unidades)
 ```
 
 ### 5.2 Sección [itu]
@@ -231,9 +232,6 @@ StandardError=null
 [Install]
 WantedBy=default.target
 ```
-
-> Si la ruta de instalación es diferente, editar `WorkingDirectory` y
-> `ExecStart` antes de continuar.
 
 ### 6.2 Activar y arrancar el servicio
 
@@ -531,19 +529,19 @@ python3 calcula_diff.py \
 systemctl --user status lee_satres.service
 
 # 2. Comprobar que se están grabando datos raw
-ls -lh /var/log/satres/448/raw/
+ls -lh /home/tw/satres/448/raw/
 
 # 3. Procesar manualmente el día de ayer
 python3 /home/tw/twstft/procesa_sesion.py \
     --config /home/tw/twstft/twstft.ini --ayer --debug
 
 # 4. Verificar fichero ITU generado
-head -30 /var/log/satres/448/itu/twroa$(date -d yesterday +%y).$(date -d yesterday +%j | awk '{printf "%03d\n", $1-1}')
+ls -lh /home/tw/satres/448/itu/
 
 # 5. Calcular diferencias con un laboratorio remoto
 python3 /home/tw/twstft/calcula_diff.py \
-    --local  /var/log/satres/448/itu/twroa61.199 \
-    --remoto PTB05:/datos/ptb \
+    --local  /home/tw/satres/448/itu/twroa61.199 \
+    --remoto PTB05:/home/tw/satres/itu_remoto/ptb \
     --salida /tmp
 ```
 
