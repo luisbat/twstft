@@ -12,6 +12,11 @@ Programas: `lee_satres.py` v0.4 · `procesa_sesion.py` v1.7 · `calcula_diff.py`
 1. Descripción del sistema
 2. Creación del usuario tw
 3. Instalación del sistema
+   - 3.1 Instalar dependencias del sistema
+   - 3.2 Clonar el repositorio
+   - 3.3 Crear el entorno virtual
+   - 3.4 Crear la estructura de directorios
+   - 3.5 Abrir el puerto 3020/UDP en el firewall
 4. Estructura de directorios
 5. Configuración de twstft.ini
 6. Puesta en marcha de lee_satres.py
@@ -159,6 +164,23 @@ mkdir -p /home/tw/ema
 
   ema/                  ← datos ambientales (independiente de unit_id)
     DDmmmAA.ema         ← puede ser un montaje NFS sobre este directorio
+```
+
+### 3.5 Abrir el puerto 3020/UDP en el firewall
+
+`lee_satres.py` escucha en el puerto UDP 3020. En AlmaLinux el firewall
+está activo por defecto y hay que abrir ese puerto:
+
+```bash
+sudo firewall-cmd --permanent --add-port=3020/udp
+sudo firewall-cmd --reload
+```
+
+Verificar que el puerto está abierto:
+
+```bash
+sudo firewall-cmd --list-ports
+# Debe aparecer: 3020/udp
 ```
 
 ---
