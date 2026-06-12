@@ -282,18 +282,27 @@ más 5 minutos, procesando el raw del día anterior completo.
 crontab -e
 ```
 
-Añadir la siguiente línea:
+Añadir las siguientes líneas:
 
 ```cron
-5 1,3,5,7,9,11,13,15,17,19,21,23 * * * /home/tw/twstft/venv/bin/python3 \
+# A las 00:05 procesar el día anterior completo (última sesión ya terminada)
+5 0 * * * /home/tw/twstft/venv/bin/python3 \
     /home/tw/twstft/procesa_sesion.py \
     --config /home/tw/twstft/twstft.ini \
     --ayer
+
+# A las 02:05, 04:05, ..., 22:05 procesar el día en curso
+# (acumula las sesiones conforme van terminando)
+5 2,4,6,8,10,12,14,16,18,20,22 * * * /home/tw/twstft/venv/bin/python3 \
+    /home/tw/twstft/procesa_sesion.py \
+    --config /home/tw/twstft/twstft.ini \
+    --hoy
 ```
 
-> La sesión de las 00:00-01:59 termina pasada la medianoche, por lo que
-> el procesado de todas las sesiones del día anterior se ejecuta a las
-> 01:05, 03:05, etc. para asegurarse de tener los datos disponibles.
+> A las 00:05 el día anterior ya ha terminado — su última sesión
+> (22:00-23:59) ha concluido — y se regenera el fichero ITU completo
+> con `--ayer`. El resto de lanzamientos usan `--hoy` para ir
+> acumulando las sesiones del día en curso conforme terminan.
 
 ### 7.2 Verificar el crontab
 
