@@ -136,6 +136,23 @@ mkdir -p /home/tw/ema
 > El subdirectorio `<unit_id>` (p.ej. `448/`) y sus subdirectorios `raw/`, `itu/`, `rp/`
 > los crea automáticamente `lee_satres.py` y `procesa_sesion.py` en la primera ejecución.
 
+### 3.5 Abrir el puerto 3020/UDP en el firewall
+
+`lee_satres.py` escucha en el puerto UDP 3020. En AlmaLinux el firewall
+está activo por defecto y hay que abrir ese puerto:
+
+```bash
+sudo firewall-cmd --permanent --add-port=3020/udp
+sudo firewall-cmd --reload
+```
+
+Verificar que el puerto está abierto:
+
+```bash
+sudo firewall-cmd --list-ports
+# Debe aparecer: 3020/udp
+```
+
 ---
 
 ## 4. Estructura de directorios
@@ -166,24 +183,6 @@ mkdir -p /home/tw/ema
     DDmmmAA.ema         ← puede ser un montaje NFS sobre este directorio
 ```
 
-### 3.5 Abrir el puerto 3020/UDP en el firewall
-
-`lee_satres.py` escucha en el puerto UDP 3020. En AlmaLinux el firewall
-está activo por defecto y hay que abrir ese puerto:
-
-```bash
-sudo firewall-cmd --permanent --add-port=3020/udp
-sudo firewall-cmd --reload
-```
-
-Verificar que el puerto está abierto:
-
-```bash
-sudo firewall-cmd --list-ports
-# Debe aparecer: 3020/udp
-```
-
----
 
 ## 5. Configuración de twstft.ini
 
