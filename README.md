@@ -252,7 +252,7 @@ La salida debe mostrar `Active: active (running)`.
 ### 6.4 Consultar el log
 
 ```bash
-tail -f /var/log/satres/448/log/lee_satres.YYYY-MM-DD.log
+tail -f /home/tw/satres/log/lee_satres.YYYY-MM-DD.log
 ```
 
 O en modo depuración (sin lanzar el daemon, útil para pruebas):
@@ -313,7 +313,7 @@ crontab -l
 ### 7.3 Consultar el log
 
 ```bash
-tail -f /var/log/satres/448/log/procesa_sesion.YYYY-MM-DD.log
+tail -f /home/tw/satres/log/procesa_sesion.YYYY-MM-DD.log
 ```
 
 ---
@@ -495,23 +495,23 @@ ese slot se descarta con un aviso.
 ```bash
 # Calcular diferencias ROA-PTB y ROA-SP para el día del fichero ITU
 python3 calcula_diff.py \
-    --local  /var/log/satres/448/itu/twroa61.199 \
+    --local  /home/tw/satres/448/itu/twroa61.199 \
     --remoto PTB05:/datos/ptb \
     --remoto SP01:/datos/sp
 
 # Ventana de 5 días con directorio de salida explícito
 python3 calcula_diff.py \
-    --local   /var/log/satres/448/itu/twroa61.199 \
+    --local   /home/tw/satres/448/itu/twroa61.199 \
     --remoto  PTB05:/datos/ptb \
     --remoto  SP01:/datos/sp \
     --remoto  USNO01:/datos/usno \
     --ventana 5 \
-    --salida  /var/log/satres/diff
+    --salida  /home/tw/satres/diff
 
 # Calcular desde el punto de vista del PTB (PTB como laboratorio local)
 python3 calcula_diff.py \
     --local  /datos/ptb/twptb61.199 \
-    --remoto ROA01:/var/log/satres/448/itu \
+    --remoto ROA01:/home/tw/satres/448/itu \
     --remoto SP01:/datos/sp
 ```
 
