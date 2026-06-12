@@ -9,17 +9,17 @@ Programas: `lee_satres.py` v0.4 · `procesa_sesion.py` v1.7 · `calcula_diff.py`
 
 ## Índice
 
-1. [Descripción del sistema](#1-descripción-del-sistema)
-2. [Creación del usuario tw](#2-creación-del-usuario-tw)
-3. [Instalación del sistema](#3-instalación-del-sistema)
-4. [Estructura de directorios](#4-estructura-de-directorios)
-5. [Configuración de twstft.ini](#5-configuración-de-twstftini)
-6. [Puesta en marcha de lee_satres.py](#6-puesta-en-marcha-de-lee_satrespy)
-7. [Programación de procesa_sesion.py con cron](#7-programación-de-procesa_sesionpy-con-cron)
-8. [Referencia de programas](#8-referencia-de-programas)
-   - 8.1 [lee_satres.py](#81-lee_satrespy)
-   - 8.2 [procesa_sesion.py](#82-procesa_sesionpy)
-   - 8.3 [calcula_diff.py](#83-calcula_diffpy)
+1. Descripción del sistema
+2. Creación del usuario tw
+3. Instalación del sistema
+4. Estructura de directorios
+5. Configuración de twstft.ini
+6. Puesta en marcha de lee_satres.py
+7. Programación de procesa_sesion.py con cron
+8. Referencia de programas
+   - 8.1 lee_satres.py
+   - 8.2 procesa_sesion.py
+   - 8.3 calcula_diff.py
 
 ---
 
