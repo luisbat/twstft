@@ -39,7 +39,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "0.4"
+__version__ = "0.5"
 
 # ---------------------------------------------------------------------------
 # Constantes por defecto
@@ -324,7 +324,7 @@ def iniciar_listener(puerto: int, basedir: str, raw_dir: str, debug: bool) -> No
                     logging.debug("[%s] %-12s | %s", unit_id, tipo, texto[:120])
                 else:
                     if tipo in ("SISTEMA_0",):
-                        logging.info("[%s] ciclo %s", unit_id, fecha_str)
+                        logging.debug("[%s] ciclo %s", unit_id, fecha_str)
 
             except Exception as exc:
                 # Error procesando un mensaje — loguear y continuar el bucle

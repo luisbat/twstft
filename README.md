@@ -106,6 +106,7 @@ sudo dnf install -y git python3 python3-pip python3-virtualenv
 cd /home/tw
 git clone https://github.com/luisbat/twstft.git
 cd twstft
+chmod +x lee_satres.py procesa_sesion.py calcula_diff.py
 ```
 
 ### 3.3 Crear el entorno virtual e instalar dependencias Python
