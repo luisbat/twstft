@@ -51,6 +51,10 @@ import sys
 import re
 import argparse
 import logging
+import configparser
+import ftplib
+import urllib.request
+import urllib.parse
 from typing import Optional
 
 import numpy as np
@@ -63,7 +67,7 @@ import plotly.graph_objects as go
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.0"
+__version__ = "1.1"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -71,6 +75,95 @@ __version__ = "1.0"
 COLS_ITU = ["LOC", "REM", "LI", "MJD", "STTIME", "NTL",
             "TW", "DRMS", "SMP", "ATL", "REFDELAY", "RSIG",
             "CI", "S", "CALR", "ESDVAR", "ESIG", "TMP", "HUM", "PRES"]
+
+# ---------------------------------------------------------------------------
+# Carga de configuración (opcional, para descarga automática)
+# ---------------------------------------------------------------------------
+
+def cargar_config(ruta: str) -> Optional[configparser.ConfigParser]:
+    """Carga twstft.ini si existe. Devuelve None si no se encuentra."""
+    if not ruta or not os.path.isfile(ruta):
+        return None
+    cfg = configparser.ConfigParser(
+        interpolation=None,
+        inline_comment_prefixes=("#",),
+    )
+    cfg.read(ruta, encoding="utf-8")
+    return cfg
+
+
+def get_lab_cfg(cfg: configparser.ConfigParser, lab: str) -> dict:
+    """
+    Devuelve los parámetros de descarga de un laboratorio desde twstft.ini.
+    Busca la sección [lab XXXX] donde nombre == lab (insensible a mayúsculas).
+    """
+    if cfg is None:
+        return {}
+    for sec in cfg.sections():
+        if not sec.lower().startswith("lab "):
+            continue
+        nombre = cfg.get(sec, "nombre", fallback="").strip()
+        if nombre.upper() == lab.upper():
+            return {
+                "itu_url":   cfg.get(sec, "itu_url",   fallback="").strip(),
+                "itu_mayus": cfg.get(sec, "itu_mayus", fallback="no").strip().lower(),  # si/no
+            }
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Descarga de ficheros ITU via FTP/HTTP
+# ---------------------------------------------------------------------------
+
+def descargar_itu(url_base: str, nombre_fichero: str,
+                  destino: str, mayus: bool) -> Optional[str]:
+    """
+    Descarga el fichero ITU desde url_base/nombre_fichero al directorio destino.
+    Soporta ftp:// y http:// / https://.
+    Si mayus=True usa el nombre en mayúsculas, si no en minúsculas.
+
+    Devuelve la ruta local del fichero descargado o None si falla.
+    """
+    nombre = nombre_fichero.upper() if mayus else nombre_fichero.lower()
+    os.makedirs(destino, exist_ok=True)
+    ruta_local = os.path.join(destino, nombre)
+
+    parsed = urllib.parse.urlparse(url_base)
+
+    try:
+        if parsed.scheme == "ftp":
+            host     = parsed.hostname
+            usuario  = urllib.parse.unquote(parsed.username or "anonymous")
+            password = urllib.parse.unquote(parsed.password or "")
+            directorio = parsed.path
+
+            logging.info("FTP: %s@%s%s/%s", usuario, host, directorio, nombre)
+            ftp = ftplib.FTP(host, timeout=30)
+            ftp.login(usuario, password)
+            if directorio:
+                ftp.cwd(directorio)
+            with open(ruta_local, "wb") as f:
+                ftp.retrbinary(f"RETR {nombre}", f.write)
+            ftp.quit()
+
+        elif parsed.scheme in ("http", "https"):
+            url = f"{url_base.rstrip('/')}/{nombre}"
+            logging.info("HTTP: %s", url)
+            urllib.request.urlretrieve(url, ruta_local)
+
+        else:
+            logging.error("Esquema no soportado: %s", parsed.scheme)
+            return None
+
+        logging.info("Descargado: %s → %s", nombre, ruta_local)
+        return ruta_local
+
+    except Exception as e:
+        logging.error("Error descargando %s: %s", nombre, e)
+        if os.path.isfile(ruta_local):
+            os.remove(ruta_local)
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Utilidades de nomenclatura
@@ -328,12 +421,14 @@ def generar_graficas(series: dict, lab_local: str,
 # ---------------------------------------------------------------------------
 
 def procesar(ruta_local_base: str, remotos: list,
-             ventana: int, dir_salida: str) -> None:
+             ventana: int, dir_salida: str,
+             cfg: Optional[configparser.ConfigParser] = None) -> None:
     """
-    ruta_local_base : ruta al fichero ITU de ROA del día más reciente
-    remotos       : lista de (lab_nombre, directorio)
-    ventana       : número de días a procesar
-    dir_salida    : directorio para .dat y gráficas
+    ruta_local_base : ruta al fichero ITU local del día más reciente
+    remotos         : lista de (lab_nombre, directorio o '')
+    ventana         : número de días a procesar
+    dir_salida      : directorio para .dat y gráficas
+    cfg             : twstft.ini (opcional, para descarga automática)
     """
     # Extraer MJD del nombre del fichero ROA
     basename = os.path.basename(ruta_local_base)
@@ -380,10 +475,28 @@ def procesar(ruta_local_base: str, remotos: list,
 
         # Procesar cada laboratorio remoto
         for lab_rem, dir_rem in remotos:
-            ruta_rem = buscar_fichero_itu(dir_rem, lab_rem, mjd)
+            ruta_rem = None
+
+            # Si hay directorio local, buscar primero ahí
+            if dir_rem:
+                ruta_rem = buscar_fichero_itu(dir_rem, lab_rem, mjd)
+
+            # Si no se encontró localmente, intentar descarga automática via ini
+            if ruta_rem is None and cfg is not None:
+                lab_cfg = get_lab_cfg(cfg, lab_rem)
+                itu_url = lab_cfg.get("itu_url", "")
+                itu_mayus = lab_cfg.get("itu_mayus", "no").lower() in ("si", "sí")
+                if itu_url:
+                    # Directorio de caché para los ficheros descargados
+                    dir_cache = dir_rem if dir_rem else os.path.join(
+                        dir_salida, "cache", lab_rem.lower())
+                    nombre_itu = nombre_itu_roa(lab_rem, mjd)
+                    ruta_rem = descargar_itu(itu_url, nombre_itu,
+                                             dir_cache, itu_mayus)
+
             if ruta_rem is None:
-                logging.warning("%s MJD %d: fichero no encontrado en %s",
-                                lab_rem, mjd, dir_rem)
+                logging.warning("%s MJD %d: fichero no encontrado ni descargado",
+                                lab_rem, mjd)
                 continue
 
             dfrem = leer_itu(ruta_rem)
@@ -446,9 +559,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--remoto", type=str, action="append", default=[],
-        metavar="LAB:DIRECTORIO",
-        help="Laboratorio remoto y directorio de sus ficheros ITU. "
-             "Repetir para varios labs (p.ej. --remoto PTB05:/datos/ptb)"
+        metavar="LAB[:DIRECTORIO]",
+        help="Laboratorio remoto y (opcionalmente) directorio de sus ficheros ITU. "
+             "Si se omite el directorio y se proporciona --config, se descarga "
+             "automáticamente usando itu_url del ini. "
+             "Repetir para varios labs (p.ej. --remoto PTB05:/datos/ptb o --remoto PTB05)"
     )
     parser.add_argument(
         "--ventana", type=int, default=1,
@@ -457,6 +572,10 @@ def main() -> None:
     parser.add_argument(
         "--salida", type=str, default=".",
         help="Directorio de salida para .dat y gráficas (defecto: actual)"
+    )
+    parser.add_argument(
+        "--config", type=str, default=None,
+        help="Ruta a twstft.ini (opcional, para descarga automática de ficheros ITU)"
     )
     parser.add_argument(
         "--debug", action="store_true",
@@ -476,18 +595,17 @@ def main() -> None:
         stream=sys.stdout,
     )
 
-    # Parsear --remoto LAB:DIRECTORIO
+    # Parsear --remoto LAB[:DIRECTORIO]
+    # El directorio es opcional si se proporciona --config con itu_url configurado
     remotos = []
     for r in args.remoto:
         partes = r.split(':', 1)
-        if len(partes) != 2:
-            print(f"Error: --remoto debe tener formato LAB:DIRECTORIO, recibido: {r}",
-                  file=sys.stderr)
-            sys.exit(1)
-        remotos.append((partes[0].strip(), partes[1].strip()))
+        lab = partes[0].strip()
+        directorio = partes[1].strip() if len(partes) == 2 else ""
+        remotos.append((lab, directorio))
 
     if not remotos:
-        print("Error: se necesita al menos un --remoto LAB:DIRECTORIO",
+        print("Error: se necesita al menos un --remoto LAB o --remoto LAB:DIRECTORIO",
               file=sys.stderr)
         sys.exit(1)
 
@@ -498,13 +616,16 @@ def main() -> None:
     logging.info("=" * 60)
     logging.info("calcula_diff.py v%s", __version__)
     logging.info("Local   : %s", args.local)
+    if args.config:
+        logging.info("Config  : %s", args.config)
     logging.info("Ventana : %d días", args.ventana)
     for lab, d in remotos:
         logging.info("Remoto  : %s → %s", lab, d)
     logging.info("Salida  : %s", args.salida)
     logging.info("=" * 60)
 
-    procesar(args.local, remotos, args.ventana, args.salida)
+    cfg = cargar_config(args.config) if args.config else None
+    procesar(args.local, remotos, args.ventana, args.salida, cfg)
 
 
 if __name__ == "__main__":
