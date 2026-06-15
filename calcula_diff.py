@@ -39,11 +39,11 @@ Uso:
 
 Ejemplos:
   python3 calcula_diff.py \\
-      --roa /var/log/satres/448/itu/twroa61.140 \\
+      --roa /home/tw/satres/448/itu/twroa61.140 \\
       --remoto PTB05:/datos/ptb \\
       --remoto SP01:/datos/sp \\
       --ventana 5 \\
-      --salida /var/log/satres/diff
+      --salida /home/tw/satres/diff
 """
 
 import os

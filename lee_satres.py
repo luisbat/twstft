@@ -45,7 +45,7 @@ __version__ = "0.5"
 # Constantes por defecto
 # ---------------------------------------------------------------------------
 PUERTO_DEFAULT  = 3020
-BASEDIR_DEFAULT = "/var/log/satres"
+BASEDIR_DEFAULT = "/home/tw/satres"
 ENCODING        = "ascii"
 BUFFER_SIZE     = 4096
 CONFIG_FILENAME = "twstft.ini"

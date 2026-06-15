@@ -66,7 +66,7 @@ __version__ = "1.7"
 # Constantes
 # ---------------------------------------------------------------------------
 CONFIG_FILENAME  = "twstft.ini"
-BASEDIR_DEFAULT  = "/var/log/satres"
+BASEDIR_DEFAULT  = "/home/tw/satres"
 MIN_MUESTRAS     = 50
 NTL_NOMINAL      = 119
 T_EVAL           = 59.5       # punto de evaluación del ajuste [s]

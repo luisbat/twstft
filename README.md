@@ -597,4 +597,44 @@ deactivate
 
 ---
 
+## Apéndice C — Formato del fichero raw
+
+El fichero `raw.YYYYMMDD` contiene todos los mensajes UDP emitidos por el
+módem SATRE tal como llegan, sin procesar. Cada línea corresponde a un
+mensaje con un prefijo que indica su tipo:
+
+| Prefijo | Contenido |
+|---|---|
+| `%0>` | Sincronización. Contiene la fecha, hora del módem y `unit_id`. Se usa para la rotación diaria del fichero. |
+| `%Tx>` | Datos de transmisión local. |
+| `%Rx1>` | Datos de recepción del canal 1. Contiene 24 campos separados por `;`: fecha, hora, `unit_id`, PRN del lab remoto, RTT, frecuencia Rx, potencia de señal y C/No. |
+| `%Rx2>`, `%Rx3>` | Canales adicionales de recepción (no usados actualmente). |
+
+`procesa_sesion.py` usa exclusivamente las líneas `%Rx1>` en formato
+largo (`L`), que contienen el RTT completo necesario para el cálculo del
+TW. El fichero se rota automáticamente a medianoche — un fichero por día.
+
+Ejemplo de línea `%Rx1>` en formato largo:
+
+```
+%Rx1>2026/04/10;00:01:00;448;00000;INT;L_0;L;yyncy;T;3;10;733;262383479.805; \
+     0.000;0.000;0.494;0.000;0.000;0.000;0.000;0.0000;70947202.453;-44.4;53.9
+```
+
+Los campos relevantes para `procesa_sesion.py` son:
+
+| Campo | Índice | Contenido |
+|---|---|---|
+| Fecha | 0 | `YYYY/MM/DD` |
+| Hora | 1 | `HH:MM:SS` |
+| Unit ID | 2 | Identificador del módem local |
+| Formato | 6 | `L` = largo, `S` = corto |
+| PRN | 10 | Código PN del laboratorio remoto |
+| RTT | 12 | Round-trip time bruto [ns] |
+| Frecuencia Rx | 21 | Frecuencia real de recepción [Hz] |
+| Potencia | 22 | Potencia de señal [dBm] |
+| C/No | 23 | Relación portadora/ruido [dBHz] |
+
+---
+
 *Documento generado para el sistema TWSTFT del ROA — Real Instituto y Observatorio de la Armada*
