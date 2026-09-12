@@ -1,0 +1,11 @@
+# Sistema TWSTFT — ROA
+# Dependencias Python
+#
+# Instalación:
+#   source venv/bin/activate
+#   pip install -r requirements.txt
+
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+plotly>=5.0

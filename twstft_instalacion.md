@@ -121,11 +121,12 @@ chmod +x lee_satres.py procesa_sesion.py calcula_diff.py
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install numpy pandas matplotlib plotly
+pip install -r requirements.txt
 deactivate
 ```
 
-El entorno virtual queda en `/home/tw/twstft/venv/`.
+El entorno virtual queda en `/home/tw/twstft/venv/`.  
+El fichero `requirements.txt` del repositorio contiene todas las dependencias necesarias.
 
 ### 3.4 Crear la estructura de directorios de datos
 
@@ -704,11 +705,11 @@ python3 /home/tw/twstft/calcula_diff.py \
 | `matplotlib` | Gráficas PNG para informes |
 | `plotly` | Gráficas HTML interactivas |
 
-Instalación:
+Instalación mediante `requirements.txt`:
 
 ```bash
 source /home/tw/twstft/venv/bin/activate
-pip install numpy pandas matplotlib plotly
+pip install -r /home/tw/twstft/requirements.txt
 deactivate
 ```
 
