@@ -67,7 +67,7 @@ import plotly.graph_objects as go
 # ---------------------------------------------------------------------------
 # Versión
 # ---------------------------------------------------------------------------
-__version__ = "1.1"
+__version__ = "1.3"
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -77,7 +77,7 @@ COLS_ITU = ["LOC", "REM", "LI", "MJD", "STTIME", "NTL",
             "CI", "S", "CALR", "ESDVAR", "ESIG", "TMP", "HUM", "PRES"]
 
 # ---------------------------------------------------------------------------
-# Carga de configuración (opcional, para descarga automática)
+# Carga de configuración (opcional, para descarga automática y Zabbix)
 # ---------------------------------------------------------------------------
 
 def cargar_config(ruta: str) -> Optional[configparser.ConfigParser]:
@@ -110,6 +110,10 @@ def get_lab_cfg(cfg: configparser.ConfigParser, lab: str) -> dict:
             }
     return {}
 
+
+# ---------------------------------------------------------------------------
+# Envío de datos a Zabbix via zabbix_sender
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Descarga de ficheros ITU via FTP/HTTP
